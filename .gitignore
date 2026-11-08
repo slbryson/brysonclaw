@@ -222,3 +222,10 @@ __marimo__/
 projects/nfl-pickem/data/*.json
 projects/scifi-tracker/data/*.db
 projects/host-dashboard/data/
+
+# node_modules (JS deps)
+node_modules/
+# secret files
+*.token
+*.pem
+*.key
