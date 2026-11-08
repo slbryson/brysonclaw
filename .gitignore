@@ -229,3 +229,6 @@ node_modules/
 *.token
 *.pem
 *.key
+
+# Local audit artifacts (kept local per Lord Bryson 2026-11-08)
+projects/nfl-pickem/data/consensus_log/
