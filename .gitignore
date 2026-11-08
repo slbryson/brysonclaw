@@ -232,3 +232,9 @@ node_modules/
 
 # Local audit artifacts (kept local per Lord Bryson 2026-11-08)
 projects/nfl-pickem/data/consensus_log/
+
+# R10: keep the local accuracy ledger out of the public workspace mirror
+!projects/nfl-pickem/data/history.json
+
+# Personal memory files (never in the public repo)
+memory/

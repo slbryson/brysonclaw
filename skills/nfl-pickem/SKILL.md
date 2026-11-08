@@ -1,6 +1,6 @@
 ---
 name: nfl-pickem
-description: Weekly NFL winner picks from the personal "NFL Pick'em" engine — beat-the-favorite via a 3-expert consensus panel + agentic judge (default), with strong-underdog and Monte-Carlo SA as fallbacks. Use when the user asks to run the NFL pickem, get/update this week's NFL picks, pick the slate, compare consensus vs strong_underdog, change the default strategy, or backtest the NFL pick engine.
+description: Weekly NFL winner picks from the personal "NFL Pick'em" engine — beat-the-favorite via a 3-expert consensus panel + agentic judge (default), with strong-underdog and Monte-Carlo SA as fallbacks. Tracks historical pick accuracy (Week 8+), tokens per week, and per-algorithm KPIs in a local ledger + dependency-free SVG/HTML dashboard. Use when the user asks to run the NFL pickem, get/update this week's NFL picks, pick the slate, compare consensus vs strong_underdog, change the default strategy, backtest the NFL pick engine, or view accuracy KPIs / the accuracy dashboard.
 ---
 
 # NFL Pick'em
@@ -16,6 +16,8 @@ Lord Bryson's standing requirement: **every pick carries a 1–16 confidence** a
 - **Status doc (single source of truth):** `/home/sidney/.openclaw/workspace/projects/NFL_PICKEM_STATUS.md`
 - **Data cache:** `projects/nfl-pickem/data/` (re-fetchable ESPN JSON; git-ignored)
 - **Audit trail:** `projects/nfl-pickem/data/consensus_log/` (one JSON per LLM panel decision — safe to resume after a crash)
+- **Accuracy ledger (R10):** `projects/nfl-pickem/data/history.json` — committed, single source of truth for historical picks + accuracy + tokens (Week 8+)
+- **Accuracy dashboard (R10):** `projects/nfl-pickem/reports/accuracy_dashboard.html` — committed, opens in any browser, no JS/deps
 
 ## Run the current week
 
@@ -72,10 +74,60 @@ Flip it, re-run the full test suite (`python3 -m pytest -q` in the project dir),
 
 ## Key files
 
-- `pickem.py` — CLI (default display, strategies, slate/week, JSON).
+- `pickem.py` — CLI (default display, strategies, slate/week, JSON, `--record`/`--seed-ledger`/`--render`).
 - `strong_underdog.py` — the deterministic beat-the-favorite rule + `*_confidence` helpers.
-- `consensus/{experts,judge,pipeline}.py` — 3-expert panel + agentic judge.
+- `consensus/{experts,judge,pipeline}.py` — 3-expert panel + agentic judge + per-game token totals.
 - `confidence.py` — single source for the 1–16 confidence mapping.
 - `present.py` — plain-text weekly brief.
+- `scoreboard.py` — R10 local accuracy ledger (`data/history.json`) + KPI engine (idempotent upsert, Brier, confidence, flips).
+- `charts.py` — R10 dependency-free SVG/HTML charts + dashboard renderer (no matplotlib, no JS).
 - `adapters/{espn,build_week}.py` — keyless ESPN fetchers (cache-first) + feature-card builder.
-- `backtest_legb.py` — Leg B backtest harness. `tests/` — full suite.
+- `backtest_legb.py` — Leg B backtest harness. `tests/` — full suite (211 tests as of 2026-11-08).
+
+## R10 — Historical accuracy KPI
+
+Lord Bryson's standing requirement (2026-11-08): maintain a durable local ledger of every pick,
+scored against actuals, starting with **Week 8**, and expose:
+
+- **Accuracy week-over-week** per algorithm
+- **Tokens spent per week** per algorithm (consensus spends; deterministic strategies report 0)
+- **Accuracy per algorithm, week over week**
+- **Brier score** (when probabilities are available)
+- **Confidence (1–16)** per pick, averaged per week
+
+All visible the moment you open the repo — `reports/accuracy_dashboard.html` is a committed
+artifact (not something you have to regenerate).
+
+**Quick commands:**
+
+```bash
+cd /home/sidney/.openclaw/workspace/projects/nfl-pickem
+
+# Idempotently seed Week 8 into the ledger (does nothing if already present)
+python3 pickem.py --seed-ledger
+
+# After a scored week, record it (default-on for scored weeks when you run --slate)
+python3 pickem.py --slate --record
+
+# Regenerate the dashboard from the ledger (no network needed)
+python3 pickem.py --render
+
+# Override the week label / use an alternate ledger file
+python3 pickem.py --slate --record --label W9
+python3 pickem.py --record --ledger /tmp/alt_history.json
+```
+
+**Week 8 seed (verified against the audited Nov-3 reports):**
+- consensus 9/12 (misses: ARI@DAL, KC@DEN, MIA@NE) → 75.0%
+- strong_underdog 11/12 (miss: ARI@DAL) → 91.7%
+
+**Token plumbing:** `LLMClient.chat()` reads Ollama's `prompt_eval_count` / `eval_count` payload
+into `client.last_usage`; `call_expert` / `call_judge` copy it into `ExpertResponse.tokens` /
+`JudgeResponse.tokens`; `ConsensusResult.tokens` is the sum across all experts + judge; the row in
+`pickem.py` carries `tokens`; `record_run()` stores the sum into the ledger. Unit-tested in
+`tests/test_scoreboard.py::test_call_expert_propagates_tokens`.
+
+**Where the KPI lives in the repo:**
+- `PROJECT_PLAN.md` — the full R10 contract (schema, week keying, token plumbing, DoD)
+- `README.md` — the quick-reference commands + the KPI explanation
+- `tests/test_scoreboard.py` + `tests/test_charts.py` — the unit tests
